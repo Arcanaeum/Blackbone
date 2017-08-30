@@ -910,4 +910,97 @@ void ProcessModules::reset()
     _ldrPatched = false;
 }
 
+/// <summary>
+/// Get all export addresses.
+/// </summary>
+/// <param name="hMod">Module to search in</param>
+/// <returns>Export info. If failed procAddress field is 0</returns>
+std::vector<exportData> ProcessModules::GetAllExports(const ModuleDataPtr& hMod)
+{
+	std::vector<exportData> vectorData;
+
+	/// Invalid module
+	if (hMod == nullptr || hMod->baseAddress == 0)
+		return vectorData;// STATUS_INVALID_PARAMETER_1;
+
+	std::unique_ptr<IMAGE_EXPORT_DIRECTORY, decltype(&free)> expData(nullptr, &free);
+
+	IMAGE_DOS_HEADER hdrDos = { 0 };
+	uint8_t hdrNt32[sizeof(IMAGE_NT_HEADERS64)] = { 0 };
+	auto phdrNt32 = reinterpret_cast<PIMAGE_NT_HEADERS32>(hdrNt32);
+	auto phdrNt64 = reinterpret_cast<PIMAGE_NT_HEADERS64>(hdrNt32);
+	DWORD expSize = 0;
+	uintptr_t expBase = 0;
+
+	_memory.Read(hMod->baseAddress, sizeof(hdrDos), &hdrDos);
+
+	if (hdrDos.e_magic != IMAGE_DOS_SIGNATURE)
+		return vectorData;// STATUS_INVALID_IMAGE_NOT_MZ;
+
+	_memory.Read(hMod->baseAddress + hdrDos.e_lfanew, sizeof(IMAGE_NT_HEADERS64), &hdrNt32);
+
+	if (phdrNt32->Signature != IMAGE_NT_SIGNATURE)
+		return vectorData;// STATUS_INVALID_IMAGE_FORMAT;
+
+	if (phdrNt32->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC)
+		expBase = phdrNt32->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+	else
+		expBase = phdrNt64->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+
+	// Exports are present
+	if (expBase)
+	{
+		if (phdrNt32->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC)
+			expSize = phdrNt32->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].Size;
+		else
+			expSize = phdrNt64->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].Size;
+
+		expData.reset(reinterpret_cast<IMAGE_EXPORT_DIRECTORY*>(malloc(expSize)));
+		IMAGE_EXPORT_DIRECTORY* pExpData = expData.get();
+
+		_memory.Read(hMod->baseAddress + expBase, expSize, pExpData);
+
+		// Fix invalid directory size
+		if (expSize <= sizeof(IMAGE_EXPORT_DIRECTORY))
+		{
+			// New size should take care of max number of present names (max name length is assumed to be 255 chars)
+			expSize = static_cast<DWORD>(
+				pExpData->AddressOfNameOrdinals - expBase
+				+ max(pExpData->NumberOfFunctions, pExpData->NumberOfNames) * 255
+				);
+
+			expData.reset(reinterpret_cast<IMAGE_EXPORT_DIRECTORY*>(malloc(expSize)));
+			pExpData = expData.get();
+			_memory.Read(hMod->baseAddress + expBase, expSize, pExpData);
+		}
+
+		WORD* pAddressOfOrds = reinterpret_cast<WORD*>(
+			pExpData->AddressOfNameOrdinals + reinterpret_cast<uintptr_t>(pExpData) - expBase);
+
+		DWORD* pAddressOfNames = reinterpret_cast<DWORD*>(
+			pExpData->AddressOfNames + reinterpret_cast<uintptr_t>(pExpData) - expBase);
+
+		DWORD* pAddressOfFuncs = reinterpret_cast<DWORD*>(
+			pExpData->AddressOfFunctions + reinterpret_cast<uintptr_t>(pExpData) - expBase);
+
+		for (DWORD i = 0; i < pExpData->NumberOfNames; i++) // pExpData->NumberOfFunctions; ++i) 
+		{
+			WORD OrdIndex = 0xFFFF;
+			char* pName = nullptr;
+
+			OrdIndex = static_cast<WORD>(pAddressOfOrds[i]);
+			pName = (char*)(pAddressOfNames[i] + reinterpret_cast<uintptr_t>(pExpData) - expBase);
+
+			exportData data = exportData();
+
+			data.procAddress = pAddressOfFuncs[OrdIndex] + hMod->baseAddress;
+			data.procName = std::string(pName).c_str();
+
+			vectorData.emplace_back(data);
+
+		}
+	}
+	return vectorData;
+}
+
 }
