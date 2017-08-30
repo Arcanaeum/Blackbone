@@ -33,7 +33,7 @@ namespace blackbone
 struct exportData
 {
     ptr_t procAddress = 0;          // Function address
-	std::string procName;			// Name of the proc address (used in GetAllExports)
+    std::string procName;           // Name of the proc address (used in GetAllExports)
 
     std::wstring forwardModule;     // Name of forward module
     std::string forwardName;        // Forwarded function name
@@ -147,7 +147,7 @@ public:
     /// <returns>Module info. nullptr if failed</returns>
     BLACKBONE_API call_result_t<ModuleDataPtr> Inject( const std::wstring& path, ThreadPtr pThread = nullptr );
 
-	std::vector<exportData> ProcessModules::GetAllExports(const ModuleDataPtr& hMod);
+    std::vector<exportData> ProcessModules::GetAllExports(const ModuleDataPtr& hMod);
 
 #ifdef COMPILER_MSVC
     /// <summary>
