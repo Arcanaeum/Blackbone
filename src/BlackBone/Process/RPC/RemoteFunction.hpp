@@ -67,13 +67,13 @@ public:
         // Deduce return type
         eReturnType retType = rt_int32;
 
-        if constexpr (isFloat)
+        if  (isFloat)
             retType = rt_float;
-        else if constexpr (isDouble)
+        else if  (isDouble)
             retType = rt_double;
-        else if constexpr (sizeof( ReturnType ) == sizeof( uint64_t ))
+        else if  (sizeof( ReturnType ) == sizeof( uint64_t ))
             retType = rt_int64;
-        else if constexpr (!std::is_reference_v<ReturnType> && sizeof( ReturnType ) > sizeof( uint64_t ))
+        else if  (!std::is_reference_v<ReturnType> && sizeof( ReturnType ) > sizeof( uint64_t ))
             retType = rt_struct;
 
         _process.remote().PrepareCallAssembly( *a, _ptr, args.arguments, _conv, retType );

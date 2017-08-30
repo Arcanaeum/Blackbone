@@ -137,9 +137,9 @@ public:
     template<typename T>
     inline NTSTATUS GetCallResult( T& result )
     {
-        if constexpr (sizeof( T ) > sizeof( uint64_t ))
+        if  (sizeof( T ) > sizeof( uint64_t ))
         {
-            if constexpr (std::is_reference_v<T>)
+            if  (std::is_reference_v<T>)
                 return _userData.Read( _userData.Read<uintptr_t>( RET_OFFSET, 0 ), sizeof( T ), reinterpret_cast<PVOID>(&result) );
             else
                 return _userData.Read( ARGS_OFFSET, sizeof( T ), reinterpret_cast<PVOID>(&result) );
